@@ -267,10 +267,11 @@ class RlNetwork(NetworkBase):
                 nest.Disconnect(pre=[c[0]], post=[c[1]], conn_spec={'rule': "one_to_one"}, syn_spec={'model': 'stdp_synapse'})
                 nest.Disconnect(pre=[c[0] + cc_input_dis], post=[c[1] + cc_output_dis], conn_spec={'rule': "one_to_one"}, syn_spec={'model': 'static_synapse'})
 
-    # 
+    # 统计休眠连接
     def get_rest_connections_num(self):
         cc = self.__get_connections(self.__layer['inputLayer'], self.__layer['outputLayer'])
         num = [len(cc)]
         num = sum(self.synchronizer.sync(num), [])
         return sum(num)
+
 
