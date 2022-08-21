@@ -168,38 +168,59 @@ class RlNetwork(NetworkBase):
         self.__set_generator(datas, self.__generator)
         nest.SetKernelStatus(self.generator, {'origin': nest.GetKernelStatus()['time']})
 
-# ------------------RL训练------------------
-
-    # # 初始化神经网络
-    # def __env_init(self, path):
-    #     build_network_from_file(path)
-    #     print('OK')
-
-    # # 突触选择
-    # def __synapse_get(self, path, i, j):
-    #     conf = pd.read_csv(path, dtype=np.float128)
+# ------------------训练一下------------------
+    def train(self, data, target):
+        image_spikes = self.converter.data(data)
+        cnt = 0
+        while True:
+            cnt += 1
+            flag_con, result, tt = self.__convergence(data, target)
+            if flag_con or cnt > 100:
+                break
+            self.__train_one(image_spikes)
+            # print("Train:")
+            # print(self.__get_output())
         
-    # # 权值变化
-    # def __synapse_change(self, weight, base_action):
-    #     weight = weight + sum(base_action) * weight
-    #     return weight
+    def __train_one(self, image_spikes):
+        # self.__open_stdp()
+        self.__clear_input()
+        self.__clear_detector()
+        self.__set_input(image_spikes)
+        nest.Simulate(self.__duration)
 
-
-    # # 突触实施action
-    # def __net_step(self, action):
-    #     # 基准
-    #     base_action = np.array([0, 0, 0])
-    #     if action == 0:     #减少
-    #         base_action[0] = -alpha
-    #     if action == 1:     #不变
-    #         base_action[1] = 0
-    #     if action == 2:     #增加
-    #         base_action[2] = alpha
 
     def __get_output(self):
-        return nest.GetStatus(self.__detector['outputDetector'], 'e')
+        return nest.GetStatus(self.__detector['outputDetector'], 'events')[0]
+    
+    def __get_opobj(self):
+        dsd = self.__get_output()
+        return [dsd["senders"], dsd["time"]]
 
-# -----------------O-V-E-R------------------
+    def __clear_detector(self):
+        nest.SetStatus(self.__detector['outputDetector'], {'n_events': 0})
+        
+
+# ------------------------------------------------------
+
+
+# Log
+# ------------------------------------------------------
+    def __print_message(self, message, *args):
+        if self.synchronizer.rank == 0:
+            print(message % args)
+
+    def progress_start(self, n):
+        if self.synchronizer.rank == 0:
+            self.progressbar.start(n)
+
+    def progress_end(self):
+        if self.synchronizer.rank == 0:
+            self.progressbar.finish()
+
+    def progress_update(self, n):
+        if self.synchronizer.rank == 0: 
+            self.progressbar.update(n)
+    
 
 # 网络构造
 #-------------------------------------------------------
@@ -267,11 +288,26 @@ class RlNetwork(NetworkBase):
                 nest.Disconnect(pre=[c[0]], post=[c[1]], conn_spec={'rule': "one_to_one"}, syn_spec={'model': 'stdp_synapse'})
                 nest.Disconnect(pre=[c[0] + cc_input_dis], post=[c[1] + cc_output_dis], conn_spec={'rule': "one_to_one"}, syn_spec={'model': 'static_synapse'})
 
-    # 统计休眠连接
+    # 
     def get_rest_connections_num(self):
         cc = self.__get_connections(self.__layer['inputLayer'], self.__layer['outputLayer'])
         num = [len(cc)]
         num = sum(self.synchronizer.sync(num), [])
         return sum(num)
 
+    # 可视化
+    #----------------------------------
+    def show(self):
+        pylab.show()
 
+    def get_input_spikes(self):
+        nest.raster_plot.from_device(self.__detector['inputDetector'], hist=False)
+
+    def get_output_spikes(self):
+        nest.raster_plot.from_device(self.__detector['outputDetector'], hist=False)
+
+    def get_input_trace(self):
+        nest.voltage_trace.from_device(self.__multimeter['inputMultimeter'])
+
+    def get_output_trace(self):
+        nest.voltage_trace.from_device(self.__multimeter['outputMultimeter'])
